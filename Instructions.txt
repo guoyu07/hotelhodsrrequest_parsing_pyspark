@@ -1,0 +1,105 @@
+\\ctovm1543.dev.sabre.com\TransferFiles 
+We'll look at PCC/PCCCode= 'B7ZB' 
+For this we'll find out how many shops/day (day, count of records)
+Were there any duplicate shops? 
+within 2016 
+what hotel properties did they shop for?  
+what stay dates? 
+frequency of shops?  
+distribution along the day  
+hotelshoprequest 
+hotelhodsrrequest(sessionid, transactionid, propertycode)
+
+
+===============================================================================================================================================================================================
+---------------------------------help----------------------------------------------------------------------------------------------------------------------------------------------------------
+Starting:
+
+
+spark-shell --driver-memory 2g 12:05 PM 
+
+pyspark --driver-memory 8G --driver-cores 4 --num-executors 4 --executor-memory 4G --executor-cores 4
+
+---------------------------------------------------------------------------------------------------------------------
+Regular Expression:
+
+
+[0-9]?[0-9][A-Za-z]{3}-[0-9]?[0-9][A-Za-z]?[A-Za-z]{2}[0-9]?[0-9]
+----------------------------------------------------------------------------------------------------------------------
+Running:
+
+spark-submit  --master yarn --num-executors 20 --driver-memory 10G   --executor-cores 6 --executor-memory 30G path/onlocal/path/hotelhodsrrequest_parsing.py
+
+spark-submit --master yarn-cluster --executor-memory 20G --num-executors 50 hello.py PractiseSheet.txt
+
+spark-submit  --master yarn --num-executors 20 --driver-memory 10G   --executor-cores 6 --executor-memory 30G \
+--conf spark.shuffle.spill=false --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \
+--conf spark.shuffle.manager=hash --conf spark.shuffle.file.buffer.kb=1000 \
+--conf spark.shuffle.sort.bypassMergeThreshold=300 \
+--class com.sabre.spark.mlib.UCFailureRateDriver \
+--master yarn spark-sellsegment-1.0-SNAPSHOT.jar /user/hive/warehouse/sellsession/sellsegmentallattributes_poc \
+/user/hive/warehouse/referencedata.db/fulltravelarranger_parquet \
+/user/hive/warehouse/flatternsellsegment_2 2016-08-01 2016-08-02 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Unix Command:
+
+cat Output/sg952655/shopperdaycount/* >> mergedshopperdaycount
+pwd
+cat mergedshopperdaycount | more
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Hadoop Commands:
+
+
+hadoop fs -ls /user/hive/warehouse/ehotel.db/hotelhodsrrequest/year=2016/month=*
+
+hadoop fs -copyToLocal /hdfs/source/path /localfs/destination/path
+hadoop fs -copyToLocal Totalshopperdaycount/ ~/
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+TableStructure:
+
+hotelhodsrrequest
+
+0)requestts (string)
+1)sessionid (string)
+2)transactionid (string)
+3)clickthroughind (string)
+4)pcccode (string)
+5)hotelchaincode (string)
+6)propertycode (int)
+7)requesttext (string)
+8)posindicator (string)
+9)year (string)
+10)month (string)
+11)day (string)
+
+
+===============================================================================================================================================================================================
+===============================================================================================================================================================================================
+Increamental Command development:
+
+textFile = sc.textFile("/user/hive/warehouse/ehotel.db/hotelhodsrrequest/year=2016/month=[0-1][0-9]/day=*/*.gz")
+textFile = sc.textFile("/user/hive/warehouse/ehotel.db/hotelhodsrrequest/year=2016/month=[0-1][1|3|4|5|6|7|8|9|0]/day=*/*.gz")
+textFile = sc.textFile("/user/hive/warehouse/ehotel.db/hotelhodsrrequest/year=2016/month=*/day=*/*.gz")
+textFile = sc.textFile("/user/hive/warehouse/ehotel.db/hotelhodsrrequest/year=2016/month=01/day=*/*.gz")
+sample = textFile.take(2)
+sample
+#filter by PCC
+PCCArray = textFile.map(lambda line: line.split("|")).filter(lambda line: line[4] == 'B7ZB')
+sample = PCCArray.take(2)
+sample
+#GroupBy Date
+shopperdaycount = PCCArray.map(lambda line: (line[0].split(" ")[0], 1)).reduceByKey(lambda a, b: a+b)
+sample = shopperdaycount.take(2)
+sample
+#Duplicate record count with sessionid, transactionid, propertycode as unique key
+filteredduplicaterecordcount = PCCArray.map(lambda line: (line[1]+" "+line[2]+" "+line[6], 1)).reduceByKey(lambda a, b: a+b).filter(lambda line: line[1] > 1)
+Orderedfilteredduplicaterecordcount = filteredduplicaterecordcount.map(lambda line: (line[1], line[0]))
+sample = Orderedfilteredduplicaterecordcount.take(5)
+sample
+#RequestText Parsing
+import re
+rqtparsing = PCCArray.filter(lambda line: ((line[7] != ' ') and (re.search('[0-9]?[0-9][A-Za-z]{3}-[0-9]?[0-9][A-Za-z]?[A-Za-z]{2}[0-9]?[0-9]', line[7])))).map(lambda line: line[0]+"|"+line[1]+"|"+line[2]+"|"+line[6]+"|"+(re.search('[0-9]?[0-9][A-Za-z]{3}-[0-9]?[0-9][A-Za-z]?[A-Za-z]{2}[0-9]?[0-9]', line[7])).group())
+rqtparsing = PCCArray.filter(lambda line: ((line[7] != ' ') and (re.search('[0-9]?[0-9][A-Za-z]{3}-[0-9]?[0-9][A-Za-z]?[A-Za-z]{2}[0-9]?[0-9]', line[7])))).map(lambda line: (line[0].split(" ")[0], line[1], line[2], line[6], (re.search('[0-9]?[0-9][A-Za-z]{3}-[0-9]?[0-9][A-Za-z]?[A-Za-z]{2}[0-9]?[0-9]', line[7])).group()))
+sample = rqtparsing.take(5)
+sample
